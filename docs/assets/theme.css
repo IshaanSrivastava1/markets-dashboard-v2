@@ -7,11 +7,11 @@
 :root {
   --page: #faf5ea;                       /* ivory ground */
   --card: #fffcf5;                       /* solid surface (hover labels) */
-  --glass: rgba(255, 252, 245, 0.72);
+  --glass: rgba(255, 252, 245, 0.7);
   --glass-strong: rgba(255, 252, 245, 0.9);
   --ink: #221c12;
   --ink-2: #5b5142;
-  --muted: #776b57;
+  --muted: #716552;
   --rule: rgba(60, 44, 18, 0.12);
   --rule-strong: rgba(60, 44, 18, 0.24);
   --gold: #c9952b;                       /* fills only: ink text sits on it */
@@ -22,11 +22,14 @@
   --shadow: 0 1px 0 rgba(255, 255, 255, 0.7) inset, 0 18px 40px -26px rgba(84, 58, 12, 0.45);
   --chart-grid: rgba(60, 44, 18, 0.1);
   --chart-axis: rgba(60, 44, 18, 0.3);
-  --glow-1: rgba(236, 184, 78, 0.6);     /* gold */
-  --glow-2: rgba(244, 158, 108, 0.42);   /* peach */
-  --glow-3: rgba(132, 166, 222, 0.34);   /* soft blue */
-  --glow-4: rgba(250, 216, 140, 0.55);   /* pale gold */
-  --glow-5: rgba(222, 140, 112, 0.3);    /* rose clay */
+  /* Glow clouds + cursor halo. Tuned so text keeps 4.5:1 even where two
+     clouds overlap under the halo (checked numerically, both themes). */
+  --glow-1: rgba(242, 190, 82, 0.62);    /* gold */
+  --glow-2: rgba(248, 166, 116, 0.46);   /* peach */
+  --glow-3: rgba(150, 182, 232, 0.24);   /* soft blue */
+  --glow-4: rgba(252, 220, 150, 0.6);    /* pale gold */
+  --glow-5: rgba(232, 154, 126, 0.34);   /* rose clay */
+  --glow-halo: rgba(255, 202, 76, 0.55); /* follows the cursor */
   --grain: 0.55;
   /* chart series: validated categorical order (dataviz), light steps */
   --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100;
@@ -64,11 +67,12 @@
     --shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 20px 44px -28px rgba(0, 0, 0, 0.9);
     --chart-grid: rgba(243, 235, 218, 0.08);
     --chart-axis: rgba(243, 235, 218, 0.24);
-    --glow-1: rgba(214, 150, 44, 0.34);
-    --glow-2: rgba(168, 84, 40, 0.3);
+    --glow-1: rgba(214, 150, 44, 0.26);
+    --glow-2: rgba(168, 84, 40, 0.28);
     --glow-3: rgba(58, 82, 160, 0.28);
-    --glow-4: rgba(232, 182, 90, 0.18);
+    --glow-4: rgba(232, 182, 90, 0.16);
     --glow-5: rgba(130, 56, 76, 0.24);
+    --glow-halo: rgba(226, 160, 60, 0.13);
     --grain: 0.35;
     --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
     --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
@@ -94,11 +98,12 @@
   --shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 20px 44px -28px rgba(0, 0, 0, 0.9);
   --chart-grid: rgba(243, 235, 218, 0.08);
   --chart-axis: rgba(243, 235, 218, 0.24);
-  --glow-1: rgba(214, 150, 44, 0.34);
-  --glow-2: rgba(168, 84, 40, 0.3);
+  --glow-1: rgba(214, 150, 44, 0.26);
+  --glow-2: rgba(168, 84, 40, 0.28);
   --glow-3: rgba(58, 82, 160, 0.28);
-  --glow-4: rgba(232, 182, 90, 0.18);
+  --glow-4: rgba(232, 182, 90, 0.16);
   --glow-5: rgba(130, 56, 76, 0.24);
+  --glow-halo: rgba(226, 160, 60, 0.13);
   --grain: 0.35;
   --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
   --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
@@ -165,6 +170,8 @@ body::before {
   text-transform: uppercase;
   color: var(--muted);
 }
+/* The eyebrow sits on the bare (moving) background, not on a card. */
+.eyebrow { color: var(--ink-2); }
 h1, h2, h3 {
   font-family: var(--font-display);
   color: var(--ink);
@@ -429,9 +436,9 @@ table.data tr.lead td { color: var(--ink); font-weight: 600; }
   border-top: 1px solid var(--rule);
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  color: var(--muted);
+  color: var(--ink-2);
 }
-.footer a { color: var(--ink-2); }
+.footer a { color: var(--ink); }
 
 @media (max-width: 560px) {
   .masthead { grid-template-columns: 1fr auto; }

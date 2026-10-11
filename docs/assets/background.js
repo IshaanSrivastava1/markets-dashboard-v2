@@ -1,48 +1,61 @@
-/* Gradient glow: five large, soft color fields that drift slowly and lean
- * toward the cursor, each at its own depth (nearer fields move more).
+/* Gradient glow: soft color clouds that drift on their own and lean toward
+ * the cursor (nearer clouds move more), plus a warm halo that follows the
+ * pointer and fades out when it leaves the page.
  *
  * Guardrails:
  *  - renders at ~22% resolution on one fixed canvas; CSS upscales it, and
  *    radial gradients stay smooth, so each frame is a handful of fills;
  *  - prefers-reduced-motion: one still frame, no animation loop;
- *  - touch screens (hover: none): slow ambient drift only, no tracking;
+ *  - touch screens (hover: none): ambient drift only, no halo;
  *  - paused while the tab is hidden;
- *  - colors come from the --glow-* tokens and refresh on theme change.
+ *  - colors come from the --glow-* tokens (tuned so text keeps 4.5:1
+ *    contrast even where clouds overlap under the halo) and refresh on theme
+ *    change.
  */
 (function () {
   var canvas = document.getElementById("glow");
   if (!canvas || !canvas.getContext) return;
   var ctx = canvas.getContext("2d");
   var SCALE = 0.22;
+  var PULL = 0.5;            // a depth-1 cloud travels halfway to the cursor
+  var CLOUD_EASE = 0.06;     // per frame
+  var HALO_EASE = 0.14;
   var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
   var noHover = window.matchMedia("(hover: none)");
 
   // Base position (viewport fractions), radius (fraction of the long side),
-  // depth (how far it leans toward the cursor), drift speed and phase.
-  var FIELDS = [
-    { x: 0.16, y: 0.18, r: 0.62, depth: 0.55, speed: 0.00011, phase: 0.0, token: "--glow-1" },
-    { x: 0.86, y: 0.12, r: 0.5, depth: 0.9, speed: 0.00014, phase: 1.7, token: "--glow-2" },
-    { x: 0.74, y: 0.8, r: 0.66, depth: 0.35, speed: 0.00009, phase: 3.1, token: "--glow-3" },
-    { x: 0.24, y: 0.88, r: 0.5, depth: 1.0, speed: 0.00012, phase: 4.4, token: "--glow-4" },
-    { x: 0.5, y: 0.46, r: 0.38, depth: 0.7, speed: 0.00016, phase: 5.2, token: "--glow-5" },
+  // depth (how strongly it leans toward the cursor), drift speed (rad/ms,
+  // 12-21 s per cycle) and phase.
+  var CLOUDS = [
+    { x: 0.14, y: 0.16, r: 0.46, depth: 0.55, speed: 0.00030, phase: 0.0, token: "--glow-1" },
+    { x: 0.86, y: 0.14, r: 0.38, depth: 0.9, speed: 0.00042, phase: 1.7, token: "--glow-2" },
+    { x: 0.78, y: 0.82, r: 0.44, depth: 0.4, speed: 0.00034, phase: 3.1, token: "--glow-3" },
+    { x: 0.22, y: 0.86, r: 0.36, depth: 1.0, speed: 0.00038, phase: 4.4, token: "--glow-4" },
+    { x: 0.5, y: 0.48, r: 0.30, depth: 0.75, speed: 0.00052, phase: 5.2, token: "--glow-5" },
   ];
+  var HALO = { r: 0.24, token: "--glow-halo" };
 
-  var W = 2, H = 2, stops = [], raf = 0, running = false;
-  var target = { x: 0.5, y: 0.5 }, eased = { x: 0.5, y: 0.5 };
+  var W = 2, H = 2, cloudStops = [], haloStops = [], raf = 0, running = false;
+  var pointer = { x: 0.5, y: 0.5, active: false };
+  var lean = { x: 0.5, y: 0.5 };       // eased cursor position the clouds lean toward
+  var halo = { x: 0.5, y: 0.5, alpha: 0 };
 
-  function rgba(parts, alpha) {
-    return "rgba(" + parts[0] + "," + parts[1] + "," + parts[2] + "," + alpha + ")";
+  function rgba(p, a) {
+    return "rgba(" + p[0] + "," + p[1] + "," + p[2] + "," + a + ")";
   }
 
-  // Fade each field to the SAME hue at zero alpha (fading to transparent
+  // Fade each glow to the SAME hue at zero alpha (fading to transparent
   // black would leave a grey fringe).
+  function stopsFor(cs, token) {
+    var m = (cs.getPropertyValue(token) || "").match(/[\d.]+/g) || [0, 0, 0, 0];
+    var a = m.length > 3 ? parseFloat(m[3]) : 1;
+    return [rgba(m, a), rgba(m, a * 0.42), rgba(m, 0)];
+  }
+
   function readColors() {
     var cs = getComputedStyle(document.documentElement);
-    stops = FIELDS.map(function (f) {
-      var m = (cs.getPropertyValue(f.token) || "").match(/[\d.]+/g) || [0, 0, 0, 0];
-      var a = m.length > 3 ? parseFloat(m[3]) : 1;
-      return [rgba(m, a), rgba(m, a * 0.42), rgba(m, 0)];
-    });
+    cloudStops = CLOUDS.map(function (c) { return stopsFor(cs, c.token); });
+    haloStops = stopsFor(cs, HALO.token);
   }
 
   function resize() {
@@ -52,28 +65,45 @@
     canvas.height = H;
   }
 
+  function blob(cx, cy, r, stops, alpha) {
+    var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    g.addColorStop(0, stops[0]);
+    g.addColorStop(0.55, stops[1]);
+    g.addColorStop(1, stops[2]);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1;
+  }
+
   function draw(t) {
     ctx.clearRect(0, 0, W, H);
     var big = Math.max(W, H);
-    var drift = reduce.matches ? 0 : 1;
-    var px = eased.x - 0.5, py = eased.y - 0.5;
-    for (var i = 0; i < FIELDS.length; i++) {
-      var f = FIELDS[i];
-      var cx = (f.x + drift * 0.06 * Math.sin(t * f.speed + f.phase) + px * 0.3 * f.depth) * W;
-      var cy = (f.y + drift * 0.05 * Math.cos(t * f.speed * 0.8 + f.phase) + py * 0.24 * f.depth) * H;
-      var r = f.r * big;
-      var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-      g.addColorStop(0, stops[i][0]);
-      g.addColorStop(0.55, stops[i][1]);
-      g.addColorStop(1, stops[i][2]);
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, W, H);
+    var moving = reduce.matches ? 0 : 1;
+    for (var i = 0; i < CLOUDS.length; i++) {
+      var c = CLOUDS[i];
+      var driftX = 0.07 * Math.sin(t * c.speed + c.phase);
+      var driftY = 0.06 * Math.cos(t * c.speed * 0.8 + c.phase);
+      var bx = c.x + moving * driftX, by = c.y + moving * driftY;
+      // Lean toward the cursor: deeper (nearer) clouds travel further.
+      var cx = (bx + (lean.x - bx) * PULL * c.depth * moving) * W;
+      var cy = (by + (lean.y - by) * PULL * c.depth * moving) * H;
+      var r = c.r * big * (1 + moving * 0.07 * Math.sin(t * c.speed * 1.7 + c.phase));
+      blob(cx, cy, r, cloudStops[i], 1);
+    }
+    if (halo.alpha > 0.01) {
+      blob(halo.x * W, halo.y * H, HALO.r * big, haloStops, halo.alpha);
     }
   }
 
   function frame(t) {
-    eased.x += (target.x - eased.x) * 0.045;
-    eased.y += (target.y - eased.y) * 0.045;
+    var tx = pointer.active ? pointer.x : 0.5;
+    var ty = pointer.active ? pointer.y : 0.5;
+    lean.x += (tx - lean.x) * CLOUD_EASE;
+    lean.y += (ty - lean.y) * CLOUD_EASE;
+    halo.x += (pointer.x - halo.x) * HALO_EASE;
+    halo.y += (pointer.y - halo.y) * HALO_EASE;
+    halo.alpha += ((pointer.active ? 1 : 0) - halo.alpha) * 0.08;
     draw(t);
     raf = window.requestAnimationFrame(frame);
   }
@@ -90,24 +120,32 @@
   }
 
   function still() {
-    // One frame at rest, centred: used for reduced motion and while paused.
+    // One frame at rest (reduced motion, or while paused): no halo.
+    var saved = halo.alpha;
+    halo.alpha = 0;
     draw(0);
+    halo.alpha = saved;
   }
 
   function onPointer(e) {
-    if (noHover.matches) return;
-    target.x = e.clientX / Math.max(1, window.innerWidth);
-    target.y = e.clientY / Math.max(1, window.innerHeight);
+    if (noHover.matches || e.pointerType === "touch") return;
+    pointer.x = e.clientX / Math.max(1, window.innerWidth);
+    pointer.y = e.clientY / Math.max(1, window.innerHeight);
+    if (!pointer.active) {
+      // Start the halo where the pointer is instead of sliding in from centre.
+      if (halo.alpha < 0.05) { halo.x = pointer.x; halo.y = pointer.y; }
+      pointer.active = true;
+    }
   }
 
-  function recentre() {
-    target.x = 0.5;
-    target.y = 0.5;
+  function onLeave() {
+    pointer.active = false;
   }
 
   window.addEventListener("pointermove", onPointer, { passive: true });
-  document.documentElement.addEventListener("mouseleave", recentre);
-  window.addEventListener("blur", recentre);
+  window.addEventListener("pointerdown", onPointer, { passive: true });
+  document.documentElement.addEventListener("mouseleave", onLeave);
+  window.addEventListener("blur", onLeave);
   window.addEventListener("resize", function () {
     resize();
     if (!running) still();
