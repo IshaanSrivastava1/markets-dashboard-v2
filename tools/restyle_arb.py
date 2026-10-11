@@ -197,6 +197,7 @@ def main():
         '  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
         '  <link rel="stylesheet" href="%s">\n'
         '  <link rel="stylesheet" href="assets/theme.css">\n'
+        '  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">\n'
         "  <style>%s  </style>" % (build.THEME_BOOT, build.FONTS_URL.replace("&", "&amp;"), PAGE_CSS))
     page, n = re.subn(r"<style>.*?</style>", lambda _m: head_extra, page, count=1, flags=re.S)
     assert n == 1, "style block not found"

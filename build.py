@@ -50,6 +50,7 @@ PAGE = """<!DOCTYPE html>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="{{FONTS_URL}}">
   <link rel="stylesheet" href="assets/theme.css">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <script src="{{PLOTLY_JS}}" charset="utf-8"></script>
 </head>
 <body>
